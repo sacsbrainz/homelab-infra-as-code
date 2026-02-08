@@ -17,6 +17,9 @@
 
   networking.hostName = "abuja"; # hostname.
 
+  # Enable nftables, required for Incus
+  networking.nftables.enable = true;
+
   # Enable networking
   networking.networkmanager.enable = true;
 
@@ -44,6 +47,49 @@
     variant = "";
   };
 
+  # Enable Incus
+  virtualisation.incus.enable = true;
+  virtualisation.incus.ui.enable = true;
+  virtualisation.incus.preseed = {
+    networks = [
+      {
+        config = {
+          "ipv4.address" = "10.0.100.1/24";
+          "ipv4.nat" = "true";
+        };
+        name = "incusbr0";
+        type = "bridge";
+      }
+    ];
+    profiles = [
+      {
+        devices = {
+          eth0 = {
+            name = "eth0";
+            network = "incusbr0";
+            type = "nic";
+          };
+          root = {
+            path = "/";
+            pool = "default";
+            size = "35GiB";
+            type = "disk";
+          };
+        };
+        name = "default";
+      }
+    ];
+    storage_pools = [
+      {
+        config = {
+          source = "/var/lib/incus/storage-pools/default";
+        };
+        driver = "dir";
+        name = "default";
+      }
+    ];
+  };
+
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.abuja = {
     isNormalUser = true;
@@ -51,6 +97,7 @@
     extraGroups = [
       "networkmanager"
       "wheel"
+      "incus-admin"
     ];
     packages = with pkgs; [ ];
   };
@@ -72,6 +119,20 @@
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
+
+  # Allow Incus traffic through the firewall
+  networking.firewall.interfaces.incusbr0.allowedTCPPorts = [
+    53 # dns
+    67 # dhcp
+  ];
+  networking.firewall.interfaces.incusbr0.allowedUDPPorts = [
+    53 # dns
+    67 # dhcp
+  ];
+
+  networking.firewall.allowedTCPPorts = [
+    8443 # incus web ui
+  ];
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

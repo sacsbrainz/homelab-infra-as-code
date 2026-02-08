@@ -6,8 +6,14 @@
 
 {
   # Bootloader.
-  boot.loader.systemd-boot.enable = false;
+  boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+
+  # Hide the menu - boots immediately to default entry
+  boot.loader.timeout = 0;
+
+  # Limit generations shown in menu (if timeout > 0)
+  boot.loader.systemd-boot.configurationLimit = 5;
 
   networking.hostName = "abuja"; # hostname.
 

@@ -103,7 +103,9 @@
       "wheel"
       "incus-admin"
     ];
-    packages = with pkgs; [ ];
+    packages = with pkgs; [
+      btop
+    ];
   };
 
   # Allow unfree packages

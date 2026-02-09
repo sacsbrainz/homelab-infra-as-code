@@ -59,13 +59,16 @@ After deploying (`sudo nixos-rebuild switch`), copy the bundle from the host and
 ```bash
 mkdir -p secrets/incus/clients/abuja
 scp abuja@<host-ip>:/var/lib/incus-client-certs/ui-admin.pfx secrets/incus/clients/abuja/ui-admin.pfx
+scp abuja@<host-ip>:/var/lib/incus-client-certs/ui-admin.pfx.pass secrets/incus/clients/abuja/ui-admin.pfx.pass
 ```
+
+The PKCS#12 password is stored in `ui-admin.pfx.pass` (some browsers won't import a client cert bundle with an empty password).
 
 Then visit `https://<host-ip>:8443/ui/` and select the client certificate when prompted.
 
 To regenerate the cert bundle on the host:
 
 ```bash
-sudo rm -f /var/lib/incus-client-certs/ui-admin.{key,crt,pfx}
+sudo rm -f /var/lib/incus-client-certs/ui-admin.{key,crt,pfx,pfx.pass}
 sudo systemctl restart incus-ui-client-cert.service
 ```

@@ -99,6 +99,7 @@
   #
   # Retrieve the bundle from:
   #   /var/lib/incus-client-certs/ui-admin.pfx
+  #   /var/lib/incus-client-certs/ui-admin.pfx.pass
   #
   # Regenerate by deleting the files and restarting:
   #   sudo systemctl restart incus-ui-client-cert.service
@@ -148,6 +149,7 @@
           -x509 -newkey rsa:4096 \
           -sha256 -days 3650 -nodes \
           -subj "/CN=${config.networking.hostName}-''${NAME}" \
+          -addext "basicConstraints = critical, CA:FALSE" \
           -addext "extendedKeyUsage = clientAuth" \
           -addext "keyUsage = digitalSignature" \
           -keyout "''${KEY}" \
@@ -155,14 +157,24 @@
       fi
 
       if [[ ! -s "''${PFX}" ]]; then
-        # Bundle for browser import (empty password).
+        # Some browser/UI import paths refuse empty PKCS#12 passwords; also, some
+        # clients have trouble importing OpenSSL 3 defaults (PBES2/AES/SHA256).
+        # Keep a per-host password file and export with widely supported PBE/MAC.
+        PASS_FILE="''${CERT_DIR}/''${NAME}.pfx.pass"
+        if [[ ! -s "''${PASS_FILE}" ]]; then
+          openssl rand -base64 24 > "''${PASS_FILE}"
+        fi
+
         openssl pkcs12 \
           -export \
           -out "''${PFX}" \
           -inkey "''${KEY}" \
           -in "''${CRT}" \
           -name "${config.networking.hostName}-''${NAME}" \
-          -passout pass:
+          -keypbe PBE-SHA1-3DES \
+          -certpbe PBE-SHA1-3DES \
+          -macalg sha1 \
+          -passout "file:''${PASS_FILE}"
       fi
 
       # Trust the cert in Incus if it's not already present.

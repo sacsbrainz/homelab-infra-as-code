@@ -45,3 +45,27 @@ Run the rebuild command:
 ```bash
 sudo nixos-rebuild switch
 ```
+
+## Incus Web UI Access (mTLS)
+
+Incus Web UI/API authentication is based on client TLS certificates (not a username/password).
+
+On `abuja`, the NixOS config generates and trusts a browser client certificate (`ui-admin`) via a `systemd` oneshot unit.
+
+### Import The Browser Certificate
+
+After deploying (`sudo nixos-rebuild switch`), copy the bundle from the host and import it into your browser/OS keychain:
+
+```bash
+mkdir -p secrets/incus/clients/abuja
+scp abuja@<host-ip>:/var/lib/incus-client-certs/ui-admin.pfx secrets/incus/clients/abuja/ui-admin.pfx
+```
+
+Then visit `https://<host-ip>:8443/ui/` and select the client certificate when prompted.
+
+To regenerate the cert bundle on the host:
+
+```bash
+sudo rm -f /var/lib/incus-client-certs/ui-admin.{key,crt,pfx}
+sudo systemctl restart incus-ui-client-cert.service
+```

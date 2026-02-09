@@ -94,6 +94,132 @@
     ];
   };
 
+  # Incus UI uses mTLS client certificates (not username/password).
+  # Generate a browser-importable client cert (PFX) and trust it in Incus.
+  #
+  # Retrieve the bundle from:
+  #   /var/lib/incus-client-certs/ui-admin.pfx
+  #
+  # Regenerate by deleting the files and restarting:
+  #   sudo systemctl restart incus-ui-client-cert.service
+  systemd.services.incus-ui-client-cert = {
+    description = "Generate and trust Incus UI client certificate (ui-admin)";
+    wantedBy = [ "multi-user.target" ];
+    requires = [ "incus.service" ];
+    after = [
+      "incus.service"
+      "incus-preseed.service"
+    ];
+    wants = [ "incus-preseed.service" ];
+
+    path = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.openssl
+      config.virtualisation.incus.clientPackage
+    ];
+
+    serviceConfig = {
+      Type = "oneshot";
+
+      # Give the interactive admin user access to the generated bundle.
+      User = "abuja";
+      Group = "incus-admin";
+
+      StateDirectory = "incus-client-certs";
+      StateDirectoryMode = "0750";
+      UMask = "0077";
+    };
+
+    script = ''
+      set -euo pipefail
+
+      CERT_DIR="/var/lib/incus-client-certs"
+      NAME="ui-admin"
+
+      KEY="''${CERT_DIR}/''${NAME}.key"
+      CRT="''${CERT_DIR}/''${NAME}.crt"
+      PFX="''${CERT_DIR}/''${NAME}.pfx"
+
+      if [[ ! -s "''${KEY}" || ! -s "''${CRT}" ]]; then
+        echo "Generating Incus UI client certificate: ''${NAME}"
+
+        openssl req \
+          -x509 -newkey rsa:4096 \
+          -sha256 -days 3650 -nodes \
+          -subj "/CN=${config.networking.hostName}-''${NAME}" \
+          -addext "extendedKeyUsage = clientAuth" \
+          -addext "keyUsage = digitalSignature" \
+          -keyout "''${KEY}" \
+          -out "''${CRT}"
+      fi
+
+      if [[ ! -s "''${PFX}" ]]; then
+        # Bundle for browser import (empty password).
+        openssl pkcs12 \
+          -export \
+          -out "''${PFX}" \
+          -inkey "''${KEY}" \
+          -in "''${CRT}" \
+          -name "${config.networking.hostName}-''${NAME}" \
+          -passout pass:
+      fi
+
+      # Trust the cert in Incus if it's not already present.
+      incus admin waitready --timeout=60 >/dev/null
+
+      FP="$(openssl x509 -noout -fingerprint -sha256 -in "''${CRT}" | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+      FP_SHORT="''${FP:0:12}"
+
+      existingFp=""
+      while IFS=, read -r trustName trustFp; do
+        trustName="$(printf '%s' "''${trustName}" | tr '[:upper:]' '[:lower:]')"
+        trustFp="$(printf '%s' "''${trustFp}" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+
+        # Found exact name match; decide if it matches our cert.
+        if [[ "''${trustName}" == "''${NAME}" ]]; then
+          existingFp="''${trustFp}"
+          break
+        fi
+      done < <(incus config trust list -f csv,noheader -c n,f)
+
+      if [[ -n "''${existingFp}" ]]; then
+        # Incus may display fingerprints shortened; treat prefix matches as equal.
+        if [[ "''${existingFp}" == "''${FP}" || "''${FP}" == "''${existingFp}"* ]]; then
+          exit 0
+        fi
+
+        echo "Replacing Incus trusted client cert for name ''${NAME} (old fp: ''${existingFp}, new fp: ''${FP_SHORT}...)"
+        incus config trust remove "''${existingFp}"
+      else
+        # If the cert is already trusted under a different name, we're good.
+        while IFS=, read -r _ trustFp; do
+          trustFp="$(printf '%s' "''${trustFp}" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if [[ "''${trustFp}" == "''${FP}" || "''${FP}" == "''${trustFp}"* ]]; then
+            exit 0
+          fi
+        done < <(incus config trust list -f csv,noheader -c n,f)
+      fi
+
+      echo "Trusting Incus UI client certificate: ''${NAME}"
+      set +e
+      incus config trust add-certificate "''${CRT}" --name "''${NAME}" --type client
+      rc=$?
+      set -e
+
+      if [[ $rc -ne 0 ]]; then
+        # Race/duplicate safe: treat as success if the cert is now present.
+        while IFS=, read -r _ trustFp; do
+          trustFp="$(printf '%s' "''${trustFp}" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if [[ "''${trustFp}" == "''${FP}" || "''${FP}" == "''${trustFp}"* ]]; then
+            exit 0
+          fi
+        done < <(incus config trust list -f csv,noheader -c n,f)
+        exit $rc
+      fi
+    '';
+  };
+
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.abuja = {
     isNormalUser = true;
@@ -105,6 +231,7 @@
     ];
     packages = with pkgs; [
       btop
+      openssl
     ];
   };
 

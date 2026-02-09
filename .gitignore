@@ -1,2 +1,6 @@
 .direnv
 .env
+secrets/
+*.pfx
+*.p12
+*.key

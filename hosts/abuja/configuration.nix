@@ -29,6 +29,7 @@
   # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
 
+  # Used en_US instead of en_NG because en_NG does not support UTF-8.
   i18n.extraLocaleSettings = {
     LC_ADDRESS = "en_US.UTF-8";
     LC_IDENTIFICATION = "en_US.UTF-8";
@@ -51,6 +52,9 @@
   virtualisation.incus.enable = true;
   virtualisation.incus.ui.enable = true;
   virtualisation.incus.preseed = {
+    config = {
+      "core.https_address" = ":8443";
+    };
     networks = [
       {
         config = {

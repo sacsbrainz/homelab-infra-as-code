@@ -279,6 +279,7 @@
     packages = with pkgs; [
       btop
       openssl
+      tmux
       byobu
       jq
     ];

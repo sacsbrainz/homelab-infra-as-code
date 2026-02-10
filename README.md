@@ -72,3 +72,18 @@ To regenerate the cert bundle on the host:
 sudo rm -f /var/lib/incus-client-certs/ui-admin.{key,crt,pfx,pfx.pass}
 sudo systemctl restart incus-ui-client-cert.service
 ```
+
+## Forgejo (Self-Hosted Git)
+
+- **URL**: `http://<host-ip>:7830`
+- **Database**: SQLite
+- **Git over SSH**: Uses the host's OpenSSH server (port 22)
+
+### First-Time Setup
+
+1. Deploy: `sudo nixos-rebuild switch`
+2. Retrieve the auto-generated admin password:
+   ```bash
+   sudo cat /var/lib/forgejo/admin-password
+   ```
+3. Visit `http://<host-ip>:7830` — log in as `abuja` and you'll be prompted to change your password

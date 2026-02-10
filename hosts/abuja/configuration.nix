@@ -2,7 +2,12 @@
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
-{ config, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   # Bootloader.
@@ -232,7 +237,37 @@
     '';
   };
 
-  # Define a user account. Don't forget to set a password with ‘passwd’.
+  services.forgejo = {
+    enable = true;
+    lfs.enable = true;
+    settings = {
+      server = {
+        HTTP_PORT = 7830;
+        SSH_PORT = lib.head config.services.openssh.ports;
+      };
+      service.DISABLE_REGISTRATION = true;
+    };
+  };
+
+  # Auto-create admin user on first boot; password saved to:
+  #   /var/lib/forgejo/admin-password
+  systemd.services.forgejo.preStart =
+    let
+      adminCmd = "${lib.getExe config.services.forgejo.package} admin user";
+      passwordFile = "/var/lib/forgejo/admin-password";
+    in
+    ''
+      if [[ ! -s "${passwordFile}" ]]; then
+        ${pkgs.openssl}/bin/openssl rand -base64 32 > "${passwordFile}"
+        chmod 600 "${passwordFile}"
+      fi
+      ${adminCmd} create --admin \
+        --username "${config.networking.hostName}" \
+        --email "${config.networking.hostName}@localhost" \
+        --password "$(tr -d '\n' < ${passwordFile})" \
+        --must-change-password || true
+    '';
+
   users.users.abuja = {
     isNormalUser = true;
     description = "solomon";
@@ -247,25 +282,16 @@
     ];
   };
 
-  # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
 
-  # List packages installed in system profile. To search, run:
-  # $ nix search wget
   environment.systemPackages = with pkgs; [
     wget
   ];
 
-  # Some programs need SUID wrappers, can be configured further or are
-  # started in user sessions.
   programs.git.enable = true;
 
-  # List services that you want to enable:
-
-  # Enable the OpenSSH daemon.
   services.openssh.enable = true;
 
-  # Allow Incus traffic through the firewall
   networking.firewall.interfaces.incusbr0.allowedTCPPorts = [
     53 # dns
     67 # dhcp
@@ -276,6 +302,7 @@
   ];
 
   networking.firewall.allowedTCPPorts = [
+    7830 # forgejo
     8443 # incus web ui
   ];
 

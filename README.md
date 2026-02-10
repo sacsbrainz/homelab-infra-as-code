@@ -11,6 +11,7 @@ Moving from Proxmox "Click Ops" (used for 2+ years) to a declarative infrastruct
 - `hosts/`: Host-specific configurations.
   - `_template/`: Reference template.
   - `abuja/`: Host `abuja`.
+- `scripts/`: Automation scripts.
 
 ## Deployment
 
@@ -87,3 +88,27 @@ sudo systemctl restart incus-ui-client-cert.service
    sudo cat /var/lib/forgejo/admin-password
    ```
 3. Visit `http://<host-ip>:7830` — log in as `abuja` and you'll be prompted to change your password
+
+### Mirror GitHub Repos
+
+The `scripts/mirror-github-to-forgejo.sh` script creates pull-mirrors of your GitHub repos on your Forgejo instance. Forgejo re-syncs automatically.
+
+1. Create `scripts/.env`:
+   ```bash
+   GITHUB_TOKEN=ghp_...   # repo + read:org scopes
+   FORGEJO_TOKEN=...      # from Forgejo Settings → Applications
+   FORGEJO_URL=http://<host-ip>:7830
+   ```
+
+2. Dry run first:
+   ```bash
+   DRY_RUN=true bash scripts/mirror-github-to-forgejo.sh
+   ```
+
+3. Run for real:
+   ```bash
+   bash scripts/mirror-github-to-forgejo.sh
+   ```
+
+Re-running is idempotent — existing mirrors are skipped and synced. Run `bash scripts/mirror-github-to-forgejo.sh --help` for all options.
+

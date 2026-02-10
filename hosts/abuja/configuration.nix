@@ -279,6 +279,8 @@
     packages = with pkgs; [
       btop
       openssl
+      byobu
+      jq
     ];
   };
 

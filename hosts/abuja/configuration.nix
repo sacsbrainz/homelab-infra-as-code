@@ -286,7 +286,7 @@
 
   nixpkgs.config.allowUnfree = true;
 
-  programs.bash.shellAliases = {
+  environment.shellAliases = {
     nu = "sudo nixos-rebuild switch";
   };
 

@@ -286,6 +286,10 @@
 
   nixpkgs.config.allowUnfree = true;
 
+  programs.bash.shellAliases = {
+    nu = "sudo nixos-rebuild switch";
+  };
+
   environment.systemPackages = with pkgs; [
     wget
   ];

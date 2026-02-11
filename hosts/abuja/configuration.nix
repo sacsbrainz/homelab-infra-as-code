@@ -25,21 +25,17 @@
   # Enable nftables, required for Incus
   networking.nftables.enable = true;
 
-  # Static IP on both ethernet ports — only the plugged-in one comes up.
+  # Use networkd — routes follow whichever ethernet port has carrier.
+  networking.useNetworkd = true;
   networking.useDHCP = false;
-  networking.defaultGateway = "192.168.1.1";
-  networking.interfaces.enp2s0.ipv4.addresses = [
-    {
-      address = "192.168.1.168";
-      prefixLength = 24;
-    }
-  ];
-  networking.interfaces.enp4s0.ipv4.addresses = [
-    {
-      address = "192.168.1.168";
-      prefixLength = 24;
-    }
-  ];
+  systemd.network.wait-online.anyInterface = true;
+  services.resolved.enable = false;
+  systemd.network.networks."10-lan" = {
+    matchConfig.Name = "enp*";
+    address = [ "192.168.1.168/24" ];
+    gateway = [ "192.168.1.1" ];
+    networkConfig.DHCP = "no";
+  };
 
   # Set your time zone.
   time.timeZone = "Africa/Lagos";
@@ -310,12 +306,10 @@
         prefetching = true;
       };
 
-      ports.dns = 53;
+      # Bind to localhost + LAN IP only (Incus dnsmasq owns 10.0.100.1:53).
+      ports.dns = "127.0.0.1:53,192.168.1.168:53";
     };
   };
-
-  # Free port 53 from systemd-resolved's stub listener so Blocky can bind it.
-  services.resolved.extraConfig = "DNSStubListener=no";
 
   # Route the host's own lookups through Blocky.
   networking.nameservers = [ "127.0.0.1" ];
@@ -350,6 +344,8 @@
       openssl
       zellij
       jq
+      busybox
+      dig
     ];
   };
 

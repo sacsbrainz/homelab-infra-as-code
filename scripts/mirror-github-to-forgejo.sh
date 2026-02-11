@@ -32,6 +32,8 @@ Configuration (via environment variables or .env file):
     MIRROR_FORKS    Include forked repos           (default: true)
     MIRROR_PRIVATE  Include private repos          (default: true)
     DRY_RUN         Log without making changes     (default: false)
+    MIRROR_DELAY    Seconds between migrations     (default: 5)
+    MAX_RETRIES     Retries for rate-limited reqs  (default: 3)
     ENV_FILE        Path to .env file              (default: .env next to script)
 
 EOF
@@ -74,6 +76,8 @@ FORGEJO_URL="${FORGEJO_URL:-http://localhost:7830}"
 MIRROR_FORKS="${MIRROR_FORKS:-true}"
 MIRROR_PRIVATE="${MIRROR_PRIVATE:-true}"
 DRY_RUN="${DRY_RUN:-false}"
+MIRROR_DELAY="${MIRROR_DELAY:-5}"
+MAX_RETRIES="${MAX_RETRIES:-3}"
 
 # Strip trailing slash from URL
 FORGEJO_URL="${FORGEJO_URL%/}"
@@ -166,6 +170,8 @@ log "Forgejo URL:   ${FORGEJO_URL}"
 log "Mirror forks:  ${MIRROR_FORKS}"
 log "Mirror private: ${MIRROR_PRIVATE}"
 log "Dry run:       ${DRY_RUN}"
+log "Mirror delay:  ${MIRROR_DELAY}s"
+log "Max retries:   ${MAX_RETRIES}"
 echo
 
 
@@ -246,6 +252,21 @@ mirror_repo() {
         return 0
     fi
 
+    # Check if repo already exists on Forgejo (no GitHub request involved)
+    fj_call GET "/repos/${forgejo_owner}/${repo_name}"
+
+    if [[ "${FJ_HTTP_CODE}" == "200" ]]; then
+        log_skip "Already exists: ${forgejo_owner}/${repo_name} — triggering sync"
+        fj_call POST "/repos/${forgejo_owner}/${repo_name}/mirror-sync"
+        if [[ "${FJ_HTTP_CODE}" == "200" ]]; then
+            log_ok "Sync triggered: ${forgejo_owner}/${repo_name}"
+        else
+            log_warn "Sync trigger returned HTTP ${FJ_HTTP_CODE} for ${forgejo_owner}/${repo_name}"
+        fi
+        return 0
+    fi
+
+    # Repo doesn't exist — migrate from GitHub
     local body
     body="$(jq -n \
         --arg clone_addr  "${clone_url}" \
@@ -272,27 +293,44 @@ mirror_repo() {
         }'
     )"
 
-    fj_call POST "/repos/migrate" -d "${body}"
+    local attempt=0
+    local success=false
 
-    case "${FJ_HTTP_CODE}" in
-        201)
-            log_ok "Mirrored: ${full_name} → ${forgejo_owner}/${repo_name}"
-            ;;
-        409)
-            log_skip "Already exists: ${forgejo_owner}/${repo_name} — triggering sync"
-            # Trigger a mirror sync for existing repos
-            fj_call POST "/repos/${forgejo_owner}/${repo_name}/mirror-sync"
-            if [[ "${FJ_HTTP_CODE}" == "200" ]]; then
-                log_ok "Sync triggered: ${forgejo_owner}/${repo_name}"
-            else
-                log_warn "Sync trigger returned HTTP ${FJ_HTTP_CODE} for ${forgejo_owner}/${repo_name}"
-            fi
-            ;;
-        *)
-            log_err "Failed (HTTP ${FJ_HTTP_CODE}): ${full_name}"
-            log_err "Response: ${FJ_BODY}"
-            ;;
-    esac
+    while (( attempt < MAX_RETRIES )); do
+        attempt=$((attempt + 1))
+
+        fj_call POST "/repos/migrate" -d "${body}"
+
+        case "${FJ_HTTP_CODE}" in
+            201)
+                log_ok "Mirrored: ${full_name} → ${forgejo_owner}/${repo_name}"
+                success=true
+                break
+                ;;
+            409)
+                # Race condition: repo was created between our check and migrate
+                log_skip "Already exists (race): ${forgejo_owner}/${repo_name}"
+                success=true
+                break
+                ;;
+            422)
+                # Rate limited — wait and retry with exponential backoff
+                local wait_time=$(( MIRROR_DELAY * attempt * 2 ))
+                log_warn "Rate limited (attempt ${attempt}/${MAX_RETRIES}): ${full_name} — retrying in ${wait_time}s…"
+                sleep "${wait_time}"
+                ;;
+            *)
+                log_err "Failed (HTTP ${FJ_HTTP_CODE}): ${full_name}"
+                log_err "Response: ${FJ_BODY}"
+                success=true  # Don't retry non-rate-limit errors
+                break
+                ;;
+        esac
+    done
+
+    if [[ "${success}" == "false" ]]; then
+        log_err "Gave up after ${MAX_RETRIES} attempts: ${full_name}"
+    fi
 }
 
 
@@ -327,6 +365,11 @@ jq -c '.[]' <<< "${FILTERED}" | while IFS= read -r repo; do
 
     log "Processing: ${full_name}${label}"
     mirror_repo "${clone_url}" "${repo_name}" "${forgejo_dest}" "${is_private}" "${description}" "${full_name}"
+
+    # Delay between migrations to avoid rate limiting
+    if [[ "${DRY_RUN}" != "true" ]]; then
+        sleep "${MIRROR_DELAY}"
+    fi
 done
 
 echo

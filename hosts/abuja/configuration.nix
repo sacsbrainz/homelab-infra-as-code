@@ -246,11 +246,17 @@
         SSH_PORT = lib.head config.services.openssh.ports;
       };
       service.DISABLE_REGISTRATION = true;
+      "git.timeout" = {
+        DEFAULT = 3600;
+        MIGRATE = 3600;
+        MIRROR = 3600;
+        CLONE = 3600;
+        PULL = 3600;
+      };
     };
   };
 
   # Auto-create admin user on first boot; password saved to:
-  #   /var/lib/forgejo/admin-password
   systemd.services.forgejo.preStart =
     let
       adminCmd = "${lib.getExe config.services.forgejo.package} admin user";

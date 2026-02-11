@@ -1,114 +1,124 @@
 # homelab-infra-as-code
 
-NixOS configurations for homelab hosts.
-
-## Background
-
-Moving from Proxmox "Click Ops" (used for 2+ years) to a declarative infrastructure. I have used NixOS as my daily driver for over 3 years.
+NixOS configs for my homelab. Moved away from Proxmox click-ops after 2+ years — everything is declarative now.
 
 ## Structure
 
-- `hosts/`: Host-specific configurations.
-  - `_template/`: Reference template.
-  - `abuja/`: Host `abuja`.
-- `scripts/`: Automation scripts.
+```
+hosts/
+  _template/    starter config for new hosts
+  abuja/        main server
+scripts/
+  mirror-github-to-forgejo.sh
+secrets/        local only, gitignored
+```
 
-## Deployment
+## Setup
 
-### Initial Setup
-
-Clone the repository to a persistent location:
+Clone somewhere persistent:
 
 ```bash
 git clone <repo-url> ~/homelab-infra-as-code
 ```
 
-### Configuration
-
-Create a shim at `/etc/nixos/configuration.nix` that imports the specific host configuration. This avoids copying files manually.
-
-Example `/etc/nixos/configuration.nix`:
+On the target host, point `/etc/nixos/configuration.nix` at the repo instead of managing configs in `/etc/nixos` directly:
 
 ```nix
 { ... }:
 {
   imports = [
-    /home/abuja/homelab-infra-as-code/hosts/abuja/configuration.nix
+    /home/<user>/homelab-infra-as-code/hosts/<hostname>/configuration.nix
     ./hardware-configuration.nix
   ];
 }
 ```
 
-### Apply Changes
-
-Run the rebuild command:
+Then rebuild:
 
 ```bash
 sudo nixos-rebuild switch
 ```
 
-## Incus Web UI Access (mTLS)
+To add a new host, copy `hosts/_template/` to `hosts/<name>/` and edit.
 
-Incus Web UI/API authentication is based on client TLS certificates (not a username/password).
+---
 
-On `abuja`, the NixOS config generates and trusts a browser client certificate (`ui-admin`) via a `systemd` oneshot unit.
+## Hosts
 
-### Import The Browser Certificate
+### abuja
 
-After deploying (`sudo nixos-rebuild switch`), copy the bundle from the host and import it into your browser/OS keychain:
+Main server. Runs Incus for containers/VMs and Forgejo as a local git server.
+
+---
+
+## Services
+
+### Incus
+
+Web UI uses mTLS — no passwords, just client certs.
+
+The NixOS config auto-generates a client cert (`ui-admin`) via a systemd oneshot. After deploying, grab the cert bundle:
 
 ```bash
 mkdir -p secrets/incus/clients/abuja
-scp abuja@<host-ip>:/var/lib/incus-client-certs/ui-admin.pfx secrets/incus/clients/abuja/ui-admin.pfx
-scp abuja@<host-ip>:/var/lib/incus-client-certs/ui-admin.pfx.pass secrets/incus/clients/abuja/ui-admin.pfx.pass
+scp abuja@<host-ip>:/var/lib/incus-client-certs/ui-admin.pfx secrets/incus/clients/abuja/
+scp abuja@<host-ip>:/var/lib/incus-client-certs/ui-admin.pfx.pass secrets/incus/clients/abuja/
 ```
 
-The PKCS#12 password is stored in `ui-admin.pfx.pass` (some browsers won't import a client cert bundle with an empty password).
+Import the `.pfx` into your browser (password is in `.pfx.pass`), then hit `https://<host-ip>:8443/ui/`.
 
-Then visit `https://<host-ip>:8443/ui/` and select the client certificate when prompted.
-
-To regenerate the cert bundle on the host:
+To regenerate:
 
 ```bash
 sudo rm -f /var/lib/incus-client-certs/ui-admin.{key,crt,pfx,pfx.pass}
 sudo systemctl restart incus-ui-client-cert.service
 ```
 
-## Forgejo (Self-Hosted Git)
+### Forgejo
 
-- **URL**: `http://<host-ip>:7830`
-- **Database**: SQLite
-- **Git over SSH**: Uses the host's OpenSSH server (port 22)
+Self-hosted git. Listens on `http://<host-ip>:7830`, uses SQLite, SSH via the host's OpenSSH on port 22.
 
-### First-Time Setup
+First time after deploy:
 
-1. Deploy: `sudo nixos-rebuild switch`
-2. Retrieve the auto-generated admin password:
-   ```bash
-   sudo cat /var/lib/forgejo/admin-password
-   ```
-3. Visit `http://<host-ip>:7830` — log in as `abuja` and you'll be prompted to change your password
+```bash
+sudo cat /var/lib/forgejo/admin-password
+```
 
-### Mirror GitHub Repos
+Log in as `abuja` at `http://<host-ip>:7830` and change the password.
 
-The `scripts/mirror-github-to-forgejo.sh` script creates pull-mirrors of your GitHub repos on your Forgejo instance. Forgejo re-syncs automatically.
+#### Mirroring GitHub repos
 
-1. Create `scripts/.env`:
-   ```bash
-   GITHUB_TOKEN=ghp_...   # repo + read:org scopes
-   FORGEJO_TOKEN=...      # from Forgejo Settings → Applications
-   FORGEJO_URL=http://<host-ip>:7830
-   ```
+`scripts/mirror-github-to-forgejo.sh` creates pull-mirrors of your GitHub repos. Forgejo handles re-syncing.
 
-2. Dry run first:
-   ```bash
-   DRY_RUN=true bash scripts/mirror-github-to-forgejo.sh
-   ```
+Create `scripts/.env`:
 
-3. Run for real:
-   ```bash
-   bash scripts/mirror-github-to-forgejo.sh
-   ```
+```bash
+GITHUB_TOKEN=ghp_...   # repo + read:org scopes
+FORGEJO_TOKEN=...      # from Forgejo → Settings → Applications
+FORGEJO_URL=http://<host-ip>:7830
+```
 
-Re-running is idempotent — existing mirrors are skipped and synced. Run `bash scripts/mirror-github-to-forgejo.sh --help` for all options.
+```bash
+# dry run
+DRY_RUN=true bash scripts/mirror-github-to-forgejo.sh
 
+# for real
+bash scripts/mirror-github-to-forgejo.sh
+```
+
+Idempotent — safe to re-run. `--help` for options.
+
+---
+
+## TODO
+
+- [ ] Blocky (DNS ad blocking)
+- [ ] CI/CD (Forgejo Actions)
+- [ ] Secrets management (agenix)
+- [ ] Immich setup
+- [ ] Transmission setup
+- [ ] Angie reverse proxy
+- [ ] Tailscale
+- [ ] Backups
+- [ ] Monitoring
+- [ ] More hosts

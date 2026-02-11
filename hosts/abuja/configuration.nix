@@ -25,8 +25,21 @@
   # Enable nftables, required for Incus
   networking.nftables.enable = true;
 
-  # Enable networking
-  networking.networkmanager.enable = true;
+  # Static IP on both ethernet ports — only the plugged-in one comes up.
+  networking.useDHCP = false;
+  networking.defaultGateway = "192.168.1.1";
+  networking.interfaces.enp2s0.ipv4.addresses = [
+    {
+      address = "192.168.1.168";
+      prefixLength = 24;
+    }
+  ];
+  networking.interfaces.enp4s0.ipv4.addresses = [
+    {
+      address = "192.168.1.168";
+      prefixLength = 24;
+    }
+  ];
 
   # Set your time zone.
   time.timeZone = "Africa/Lagos";
@@ -256,6 +269,57 @@
     };
   };
 
+  # Blocky — DNS ad blocker.
+  # Point your router's DHCP DNS at this machine's IP for network-wide blocking.
+  services.blocky = {
+    enable = true;
+    settings = {
+      upstreams.groups.default = [
+        "https://one.one.one.one/dns-query"
+        "https://dns.google/dns-query"
+      ];
+
+      bootstrapDns = [
+        {
+          upstream = "https://one.one.one.one/dns-query";
+          ips = [
+            "1.1.1.1"
+            "1.0.0.1"
+          ];
+        }
+        {
+          upstream = "https://dns.google/dns-query";
+          ips = [
+            "8.8.8.8"
+            "8.8.4.4"
+          ];
+        }
+      ];
+
+      blocking = {
+        denylists.ads = [
+          "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+          "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.txt"
+        ];
+        clientGroupsBlock.default = [ "ads" ];
+        blockType = "zeroIp";
+      };
+
+      caching = {
+        minTime = "5m";
+        prefetching = true;
+      };
+
+      ports.dns = 53;
+    };
+  };
+
+  # Free port 53 from systemd-resolved's stub listener so Blocky can bind it.
+  services.resolved.extraConfig = "DNSStubListener=no";
+
+  # Route the host's own lookups through Blocky.
+  networking.nameservers = [ "127.0.0.1" ];
+
   # Auto-create admin user on first boot; password saved to:
   systemd.services.forgejo.preStart =
     let
@@ -278,7 +342,6 @@
     isNormalUser = true;
     description = "solomon";
     extraGroups = [
-      "networkmanager"
       "wheel"
       "incus-admin"
     ];
@@ -314,8 +377,12 @@
   ];
 
   networking.firewall.allowedTCPPorts = [
+    53 # blocky dns
     7830 # forgejo
     8443 # incus web ui
+  ];
+  networking.firewall.allowedUDPPorts = [
+    53 # blocky dns
   ];
 
   # This value determines the NixOS release from which the default

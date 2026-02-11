@@ -47,7 +47,7 @@ To add a new host, copy `hosts/_template/` to `hosts/<name>/` and edit.
 
 ### abuja
 
-Main server. Runs Incus for containers/VMs and Forgejo as a local git server.
+Main server. Runs Incus for containers/VMs, Forgejo as a local git server, and Blocky for DNS ad blocking.
 
 ---
 
@@ -72,6 +72,25 @@ To regenerate:
 ```bash
 sudo rm -f /var/lib/incus-client-certs/ui-admin.{key,crt,pfx,pfx.pass}
 sudo systemctl restart incus-ui-client-cert.service
+```
+
+### Blocky
+
+DNS ad blocker. Listens on port 53, serves the host and LAN clients.
+
+Upstream resolvers: Cloudflare + Google (DNS-over-HTTPS).  
+Blocklists: [StevenBlack unified](https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts), [Hagezi Multi Pro](https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.txt).
+
+After deploying, point your router's DHCP DNS at abuja's IP for network-wide blocking.
+
+Quick checks:
+
+```bash
+# should resolve normally
+dig @127.0.0.1 google.com
+
+# should return 0.0.0.0 (blocked)
+dig @127.0.0.1 ads.google.com
 ```
 
 ### Forgejo
@@ -112,7 +131,7 @@ Idempotent — safe to re-run. `--help` for options.
 
 ## TODO
 
-- [ ] Blocky (DNS ad blocking)
+- [x] Blocky (DNS ad blocking)
 - [ ] CI/CD (Forgejo Actions)
 - [ ] Secrets management (agenix)
 - [ ] Immich setup

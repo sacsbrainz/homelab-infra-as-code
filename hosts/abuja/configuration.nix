@@ -314,6 +314,13 @@
   # Route the host's own lookups through Blocky.
   networking.nameservers = [ "127.0.0.1" ];
 
+  # Immich — self-hosted photo & video backup.
+  services.immich = {
+    enable = true;
+    host = "0.0.0.0";
+    openFirewall = true; # auto-open port 2283
+  };
+
   # Auto-create admin user on first boot; password saved to:
   systemd.services.forgejo.preStart =
     let

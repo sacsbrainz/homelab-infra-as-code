@@ -127,6 +127,16 @@ bash scripts/mirror-github-to-forgejo.sh
 
 Idempotent — safe to re-run. `--help` for options.
 
+### Immich
+
+Self-hosted photo & video backup. Web UI at `http://<host-ip>:2283`.
+
+First time after deploy, open the web UI and create an admin account.
+
+Mobile apps: [Android](https://get.immich.app/android) / [iOS](https://get.immich.app/ios) — point them at `http://<host-ip>:2283`.
+
+Media files stored at `/var/lib/immich` on the host. To change, update `services.immich.mediaLocation` in the NixOS config, move existing files, and rebuild.
+
 ---
 
 ## TODO
@@ -134,7 +144,7 @@ Idempotent — safe to re-run. `--help` for options.
 - [x] Blocky (DNS ad blocking)
 - [ ] CI/CD (Forgejo Actions)
 - [ ] Secrets management (agenix)
-- [ ] Immich setup
+- [x] Immich setup
 - [ ] Transmission setup
 - [ ] Angie reverse proxy
 - [ ] Tailscale

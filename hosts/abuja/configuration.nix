@@ -346,6 +346,9 @@
       "wheel"
       "incus-admin"
     ];
+    openssh.authorizedKeys.keys = [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEBPaqyZjT6kizKwtS9oBDU52INrKuOvMm6nP+DTzSJ0 sacs@homelab"
+    ];
     packages = with pkgs; [
       btop
       openssl
